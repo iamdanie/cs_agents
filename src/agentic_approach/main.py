@@ -1,10 +1,18 @@
 import asyncio
 from agents import Agent, Runner, InputGuardrail, GuardrailFunctionOutput, FileSearchTool, function_tool
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from openai import OpenAI
 from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 import requests
+import json
+
+# WebSocket dependencies
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+import uvicorn
+from typing import Dict, List, Any, Optional
+from uuid import uuid4
 
 import os
 import datetime
@@ -276,8 +284,101 @@ triage_agent = Agent(
 # Shared context for conversation state
 conversation_context = {}
 
-# Main conversation loop
-async def main():
+# Connection manager for WebSockets
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, WebSocket] = {}
+        self.conversation_histories: Dict[str, List] = {}
+        self.last_agents: Dict[str, Agent] = {}
+    
+    async def connect(self, websocket: WebSocket, client_id: str):
+        await websocket.accept()
+        self.active_connections[client_id] = websocket
+        self.conversation_histories[client_id] = []
+        self.last_agents[client_id] = triage_agent
+    
+    def disconnect(self, client_id: str):
+        if client_id in self.active_connections:
+            del self.active_connections[client_id]
+            del self.conversation_histories[client_id]
+            del self.last_agents[client_id]
+    
+    async def send_message(self, client_id: str, message: str, agent_name: str = None):
+        if client_id in self.active_connections:
+            data = {
+                "message": message,
+                "agent": agent_name
+            }
+            await self.active_connections[client_id].send_json(data)
+    
+    async def broadcast(self, message: str):
+        for client_id in list(self.active_connections.keys()):
+            await self.send_message(client_id, message)
+
+# Create FastAPI application
+app = FastAPI(title="Kavak Bot API")
+
+# Set up CORS for frontend access
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, specify your frontend domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize connection manager
+manager = ConnectionManager()
+
+# WebSocket endpoint
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await manager.connect(websocket, client_id)
+    
+    try:
+        while True:
+            user_input = await websocket.receive_text()
+            
+            # Get client-specific context and history
+            conversation_history = manager.conversation_histories[client_id]
+            last_agent = manager.last_agents[client_id]
+            
+            try:
+                # Send acknowledgement to client
+                await manager.send_message(client_id, "Processing your request...", "system")
+                
+                # Process the input with the bot
+                runner_input = conversation_history + [{"content": user_input, "role": "user"}]
+                result = await Runner.run(last_agent, input=runner_input, context=conversation_context)
+                
+                # Check if triage is needed
+                if result.final_output.needsTriage:
+                    await manager.send_message(client_id, "Transferring to another agent...", "system")
+                    last_agent = triage_agent
+                    result = await Runner.run(last_agent, input=runner_input, context=conversation_context)
+                
+                # Update client-specific context
+                manager.conversation_histories[client_id] = result.to_input_list()
+                manager.last_agents[client_id] = result.last_agent
+                
+                # Send response to client
+                if hasattr(result.final_output, "message"):
+                    await manager.send_message(
+                        client_id, 
+                        result.final_output.message,
+                        result.last_agent.name
+                    )
+            except Exception as e:
+                if "tripwire" in str(e).lower():
+                    await manager.send_message(client_id, "Sorry, I can't respond to that, please rephrase.", "system")
+                else:
+                    await manager.send_message(client_id, f"Error: {str(e)}", "system")
+    
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
+
+# Main conversation loop (CLI version)
+async def main_cli():
     conversation_history = []
     last_agent = triage_agent
     print("Start chatting with your assistant (type 'exit', 'quit'. or 'bye' to stop):\n")
@@ -310,4 +411,13 @@ async def main():
 
 # Entry point
 if __name__ == "__main__":
-    asyncio.run(main())
+    import sys
+    
+    # Check if running in CLI or WebSocket mode
+    if len(sys.argv) > 1 and sys.argv[1] == "--cli":
+        asyncio.run(main_cli())
+    else:
+        # Run the FastAPI app with Uvicorn
+        print("Starting WebSocket server at http://localhost:8000")
+        print("For CLI mode, run with --cli argument")
+        uvicorn.run(app, host="0.0.0.0", port=8000)
