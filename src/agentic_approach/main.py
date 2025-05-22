@@ -3,6 +3,8 @@ from agents import Agent, Runner, InputGuardrail, GuardrailFunctionOutput, FileS
 from pydantic import BaseModel
 from openai import OpenAI
 from dotenv import load_dotenv
+from bs4 import BeautifulSoup
+import requests
 
 import os
 import datetime
@@ -10,8 +12,11 @@ import datetime
 load_dotenv()
 
 api_key = os.getenv("OPENAI_API_KEY")
+kb_url = os.getenv("KB_URL")
 
 client = OpenAI(api_key=api_key)
+
+# Create car stock vector store ToDo: see if we can move this elsewhere an call it as a function
 
 file = client.files.create(
     file=open("resources/car_stock.json", "rb"),
@@ -26,11 +31,85 @@ client.vector_stores.files.create(
     file_id=file_id,
 )
 
-result = client.vector_stores.files.list(
-    vector_store_id=vector_store.id
-)
-print(result)
+# result = client.vector_stores.files.list(
+#     vector_store_id=vector_store.id
+# )
+# print(result)
 
+# Gets webpage from the web, scrape it and save in a text file ToDo: move this elsewhere and call it as a func
+
+response = requests.get(kb_url)
+response.raise_for_status()
+
+soup = BeautifulSoup(response.text, 'html.parser')
+
+content = soup.body
+
+for post_header in content.find_all('div', class_='single-post-header'):
+    post_header.decompose()
+    
+for sidebar in content.find_all('div', class_='sidebar'):
+    sidebar.decompose()
+    
+for header in content.find_all('header'):
+    header.decompose()
+    
+for nav in content.find_all('nav'):
+    nav.decompose()
+    
+for footer in content.find_all('footer'):
+    footer.decompose()
+    
+for h3 in content.find_all('h3'):
+	if h3.string: 
+		h3.string.replace_with(f"- {h3.string.upper()}")
+	else:
+		inner_text = h3.get_text(separator=' ', strip=True)
+		h3.clear()
+		h3.append(f"- {inner_text.upper()}\n")
+          
+for li in content.find_all('li'):
+	if li.string: 
+		li.string.replace_with(f"-- {li.string.upper()}")
+	else:
+		inner_text = li.get_text(separator=' ', strip=True)
+		li.clear()
+		li.append(f"-- {inner_text.upper()}\n")
+          
+for h2 in content.find_all('h2'):
+	if h2.string: 
+		h2.string.replace_with(f"{h3.string.upper()}\n")
+	else:
+		inner_text = h2.get_text(separator=' ', strip=True)
+		h2.clear()
+		h2.append(f"{inner_text.upper()}\n")
+
+text = content.get_text(separator='\n', strip=True)
+
+with open("resources/kavak_knowledge_base.txt", "w", encoding="utf-8") as file:
+    file.write(text)
+    
+# Create knowledge base vector store ToDo: see if we can move this elsewhere an call it as a function
+    
+kb_file = client.files.create(
+    file=open("resources/kavak_knowledge_base.txt", "rb"),
+    purpose="assistants"
+)
+kb_file_id = kb_file.id
+
+kb_vector_store = client.vector_stores.create(name="Kavak knowledge base")
+
+client.vector_stores.files.create(
+    vector_store_id=kb_vector_store.id,
+    file_id=kb_file_id,
+)
+
+# kb_result = client.vector_stores.files.list(
+#     vector_store_id=kb_vector_store.id
+# )
+# print(kb_result)
+
+# ToDo: We need to move these guys elsewhere and import them here
 class GuardrailCheck(BaseModel):
 	is_homework: bool
 	is_safe: bool
