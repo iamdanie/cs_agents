@@ -111,9 +111,8 @@ client.vector_stores.files.create(
 
 # ToDo: We need to move these guys elsewhere and import them here
 class GuardrailCheck(BaseModel):
-	is_homework: bool
+	is_business: bool
 	is_safe: bool
-	is_relevant: bool
 	reason: str
     
 class Installment(BaseModel):
@@ -139,29 +138,12 @@ class CarData(BaseModel):
 guardrail_agent = Agent(
     name="Smart Guardrail",
     instructions="""You are a guardrail agent responsible for validating user input.
-				- Be polite if they just want to say hello or something casual, don't engage into irrelevent topics, though
-				- Set `is_homework` to True if the input is about school subjects (math, history, science, etc.) or trying to buy a car.
+				- Be polite if they just want to say hello or something casual, but don't engage into irrelevent topics
+				- Set `is_business` to True if the input is about kavak company or if the input is about the user trying to buy a car.
 				- Set `is_safe` to False if the input contains offensive, inappropriate, or dangerous content.
-				- Set `is_relevant` to True if the input is within the tutoring or educational domain, or cars domain.
 				Always explain your reasoning in the `reason` field.
 				""",
     output_type=GuardrailCheck,
-)
-
-# Math tutor agent
-math_tutor_agent = Agent(
-    name="Math Tutor",
-    handoff_description="Handles math-related questions.",
-    instructions="You are a math tutor. Help the user solve math problems. "
-                 "Explain your steps clearly and include examples when appropriate.",
-)
-
-# History tutor agent
-history_tutor_agent = Agent(
-    name="History Tutor",
-    handoff_description="Handles history-related questions.",
-    instructions="You are a history tutor. Help the user understand historical events. "
-                 "Provide context and clear explanations.",
 )
 
 @function_tool
@@ -236,6 +218,27 @@ car_sales_agent = Agent(
 	]
 )
 
+# Customer success agent
+customer_success_agent = Agent(
+     name="Kavak customer success agent",
+     handoff_description="Handles queries about overall company data such as mission, current status, and information related to inspection centres location and schedules",
+     instructions=(
+        "You are a customer success agent for Kavak."
+        "Follow the following routine with the user:"
+        "1. Ask them what do they want to know about kavak and let them know you can help with information regarding the company like current company status and info related to inspection centres location and schedules"
+        "- If they are asking for nearest inspection centres to their location, don't jump into providing options instantly; instead, collect user location references such as the state or city they're located, country, etc"
+        "2. Based on their answer, look up for the requested data by querying the attached file"
+        "- Don't let them know where you're getting the information from"
+        "3. If found, provide the requested information in a very structured, brief and understandable way to the user"
+        "- If the information they requested is not found within the attached file, don't invent one, just let them know unfortunately you don't have that information with you"
+    ),
+	tools=[
+        FileSearchTool(
+			vector_store_ids=[kb_vector_store.id],
+		)
+	]
+)
+
 # Guardrail function
 async def smart_guardrail(ctx, agent, input_data):
     result = await Runner.run(guardrail_agent, input_data, context=ctx.context)
@@ -245,17 +248,17 @@ async def smart_guardrail(ctx, agent, input_data):
         return GuardrailFunctionOutput(output_info=final_output, tripwire_triggered=True)
 
     # 🟡 Warn or redirect if off-topic (optional)
-    if not final_output.is_homework or not final_output.is_relevant:
+    if not final_output.is_business:
         print("⚠️ Off-topic or irrelevant input:", final_output.reason)
 
     return GuardrailFunctionOutput(output_info=final_output, tripwire_triggered=False)
 
-# Triage agent that routes to math or history tutors
+# Triage agent that routes to cs or sales
 triage_agent = Agent(
     name="Triage Agent",
-    instructions="Determine whether the user's question is about math, history, or if they're showing intent to buy a car"
-                 "and route the question to the correct specialist tutor or agent.",
-    handoffs=[math_tutor_agent, history_tutor_agent, car_sales_agent],
+    instructions="Determine whether the user's question is about kavak company, or if they're showing intent to buy a car"
+                 "and route the question to the correct agent.",
+    handoffs=[customer_success_agent, car_sales_agent],
     input_guardrails=[
         InputGuardrail(guardrail_function=smart_guardrail),
     ],
@@ -264,18 +267,17 @@ triage_agent = Agent(
 # Shared context for conversation state
 conversation_context = {}
 
-
 # Main conversation loop
 async def main():
-    conversation_history = []  # <- history across turns
+    conversation_history = []
     last_agent = triage_agent
-    print("Start chatting with your assistant (type 'exit' to stop):\n")
+    print("Start chatting with your assistant (type 'exit', 'quit'. or 'bye' to stop):\n")
     
     while True:
         user_input = input("User: ")
-        if user_input.strip().lower() in {"exit", "quit"}:
+        if user_input.strip().lower() in {"exit", "quit", "bye"}:
             break
-
+        
         try:
             runner_input = conversation_history + [{"content": user_input, "role": "user"}]
             result = await Runner.run(last_agent, input=runner_input, context=conversation_context)
