@@ -134,6 +134,10 @@ class CarData(BaseModel):
     year: str
     version: str
 
+class AgentOutput(BaseModel):
+	message: str
+	needsTriage: bool
+
 # Guardrail agent that checks if the user's input is a homework question
 guardrail_agent = Agent(
     name="Smart Guardrail",
@@ -197,7 +201,7 @@ car_sales_agent = Agent(
     name="Car Sales Agent",
     handoff_description="Handles car buying intent questions.",
     instructions=(
-        "You are a sales agent for Kavak. You understand english and spanish and you're to help the user guiding them with the process of buying a car"
+        "You are a sales agent for Kavak. You understand english and spanish and you're only to help the user guiding them with the process of buying a car, you don't provide customer success information"
         "Follow the following routine with the user:"
 		"1. Ask them about any preferences on car features based on the properties within the attached file - don't jump into giving them options immediatly without gathering their preferences first"
         "2. Based on their given preferences, look up for options in the attached file and bring them some options based on what they need - if there are no matches, tell the user and start over from 1."
@@ -208,6 +212,7 @@ car_sales_agent = Agent(
         "7. If they didn't provide the installments number (plan) or the deposit amount, ask for it two or three more times"
         "8. Help the user with precise answers if they ask any clarifying questions on the financial plan info you provided"
         "9. Ask them if you can help them with something else related cars information"
+        "- If the user brings up a topic outside of car sales and car stock information, you will ask for triage support, you never offer information you don't have in your possesion"
 	),
 	tools=[
         FileSearchTool(
@@ -215,13 +220,14 @@ car_sales_agent = Agent(
 			vector_store_ids=[vector_store.id],
 		),
         create_financial_plan
-	]
+	],
+	output_type=AgentOutput
 )
 
 # Customer success agent
 customer_success_agent = Agent(
      name="Kavak customer success agent",
-     handoff_description="Handles queries about overall company data such as mission, current status, and information related to inspection centres location and schedules",
+     handoff_description="Handles queries about kavak information such as mission, current status, and information related to inspection centres location and schedules, you can't provide information about car stock or sales",
      instructions=(
         "You are a customer success agent for Kavak."
         "Follow the following routine with the user:"
@@ -231,12 +237,14 @@ customer_success_agent = Agent(
         "- Don't let them know where you're getting the information from"
         "3. If found, provide the requested information in a very structured, brief and understandable way to the user"
         "- If the information they requested is not found within the attached file, don't invent one, just let them know unfortunately you don't have that information with you"
+        "- If the user brings up a topic outside of your purview, for instance, showing buying intent, you will ask for triage support, you never offer information about car models to the user"
     ),
 	tools=[
         FileSearchTool(
 			vector_store_ids=[kb_vector_store.id],
 		)
-	]
+	],
+	output_type=AgentOutput
 )
 
 # Guardrail function
@@ -262,6 +270,7 @@ triage_agent = Agent(
     input_guardrails=[
         InputGuardrail(guardrail_function=smart_guardrail),
     ],
+    output_type=AgentOutput
 )
 
 # Shared context for conversation state
@@ -281,9 +290,18 @@ async def main():
         try:
             runner_input = conversation_history + [{"content": user_input, "role": "user"}]
             result = await Runner.run(last_agent, input=runner_input, context=conversation_context)
+            
+            if result.final_output.needsTriage:
+                print("Transferring to another agent:")
+                last_agent = triage_agent
+                result = await Runner.run(last_agent, input=runner_input, context=conversation_context)
+				
+            print("result:", result.last_agent.name)
             conversation_history = result.to_input_list()
             last_agent = result.last_agent
-            print("Assistant:", result.final_output)
+            
+            if hasattr(result.final_output, "message"):
+                print("Assistant:", result.final_output.message)
         except Exception as e:
             if "tripwire" in str(e).lower():
                 print("Sorry, i can't respond to that, please rephrase.")

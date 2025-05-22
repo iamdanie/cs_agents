@@ -16,6 +16,7 @@ sales_agent = Agent(
         "1. Ask them about any preferences for cars regarding size, model, brand, price, or equipment.\n"
         "2. Based on their preferences, look up for options in the sources/car_stock.csv file and bring three of the most similar options based on their requirements\n"
         "3. Once user chooses one of the options, provide them with a financial plan of the selected car by the stock_id of the chosen option\n"
+        "- If the user brings up a topic outside of your purview, you will need triage support, don't try to solve it on your own"
         ""
     ),
     tools=[provide_financial_plan, transfer_back_to_triage],
