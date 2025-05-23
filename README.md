@@ -9,8 +9,8 @@ This project implements a conversational bot for Kavak with two main agents:
 - **Customer Success Agent**: Provides information about Kavak as a company and their services
 
 The bot is built using:
-- OpenAI's API for natural language understanding and generation
-- Vector stores for efficient knowledge retrieval
+- OpenAI's Agents API for natural language understanding and generation
+- Vector stores for efficient knowledge retrieval (knowledge base)
 - A triage system that routes queries to the appropriate agent
 
 ## Features
@@ -19,7 +19,7 @@ The bot is built using:
 - Guardrails to ensure safe and relevant responses
 - Financial plan calculation for cars
 - Vector-based search for car inventory and company knowledge
-- Supports both CLI and WhatsApp interfaces
+- Supports both CLI and WhatsApp (Twilio) modes
 
 ## Setup
 
@@ -88,7 +88,12 @@ poetry run python src/bot/main.py
 1. Apply for a Twilio WhatsApp Business Profile
 2. Set up production webhooks in the Twilio console
 3. Update your `.env` file with production credentials
-4. Deploy the API server to a cloud provider
+4. Deploy the API server to a cloud provider - (Optional) Install an ngrok server from your local machine and deploy it by using
+   
+```bash
+brew install ngrok
+ngrok http http://localhost:8000
+```
 
 ## API Endpoints
 
@@ -96,26 +101,15 @@ The WhatsApp API exposes the following endpoints:
 
 - **POST /webhook/incoming**: Webhook for incoming WhatsApp messages
 - **POST /webhook/status**: Webhook for message status updates
-- **POST /api/send**: Send a WhatsApp message programmatically
 - **POST /api/direct/message**: Test endpoint for sending messages without WhatsApp
-- **GET /api/sessions**: List active conversation sessions (admin)
-- **DELETE /api/sessions/{phone_number}**: Delete a conversation session (admin)
+- **POST /api/send**: Send a WhatsApp message programmatically (debug)
+- **GET /api/sessions**: List active conversation sessions (debug)
+- **DELETE /api/sessions/{phone_number}**: Delete a conversation session (debug)
 
 ## Development
 
 ### Project Structure
 
-- `src/agentic_approach/main.py`: Core bot implementation
-- `src/agentic_approach/api.py`: WhatsApp API integration
+- `src/bot/main.py`: Core bot implementation
+- `src/api/main.py`: WhatsApp API integration
 - `resources/`: Contains car inventory and knowledge base files
-
-### Adding New Capabilities
-
-To add new capabilities to the bot:
-1. Add new agent classes in `main.py`
-2. Update the triage agent to route to new agents when appropriate
-3. Add any new tools that the agents might need
-
-## License
-
-Proprietary - All rights reserved
