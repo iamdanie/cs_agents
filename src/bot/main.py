@@ -28,8 +28,6 @@ knowledge_base_text = parse_page_content(kb_url)
 
 vector_store, kb_vector_store = initialize_bot_stores(client, knowledge_base_text)
 
-print(vector_store, kb_vector_store)
-
 guardrail_agent = Agent(
     name="Smart Guardrail",
     instructions="""You are a guardrail agent responsible for validating user input.

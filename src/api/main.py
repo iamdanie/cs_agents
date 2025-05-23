@@ -59,7 +59,7 @@ async def process_message(phone_number: str, message_content: str):
         )
         
         if result.final_output.needsTriage:
-            print("Transferring to another agent:")
+            print("Transferring to another agent...")
             session["last_agent"] = triage_agent
             result = await Runner.run(
                 session["last_agent"],
@@ -69,6 +69,8 @@ async def process_message(phone_number: str, message_content: str):
         
         session["conversation_history"] = result.to_input_list()
         session["last_agent"] = result.last_agent
+        
+        print("Current agent:", f"{session["last_agent"].name}")
         
         if hasattr(result.final_output, "message"):
             return result.final_output.message
