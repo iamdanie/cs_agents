@@ -2,14 +2,14 @@
 WhatsApp API integration for the Kavak Bot.
 This module provides API endpoints to integrate the Kavak Bot with WhatsApp using Twilio's API.
 """
+from agents import Runner
 from typing import Dict
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, BackgroundTasks
 from dotenv import load_dotenv
 from twilio.rest import Client
 from twilio.request_validator import RequestValidator
 from src.bot.main import (
-    triage_agent,
-    Runner,
+    triage_agent
 )
 from src.api.models import (
     Settings,
@@ -49,10 +49,8 @@ async def process_message(phone_number: str, message_content: str):
     """Process a message using the bot and return a response."""
     session = get_or_create_conversation_session(phone_number)
     
-    # Add the user message to the conversation history
     session["conversation_history"].append({"content": message_content, "role": "user"})
     
-    # Process the message with the agent
     try:
         result = await Runner.run(
             session["last_agent"], 
@@ -61,6 +59,7 @@ async def process_message(phone_number: str, message_content: str):
         )
         
         if result.final_output.needsTriage:
+            print("Transferring to another agent:")
             session["last_agent"] = triage_agent
             result = await Runner.run(
                 session["last_agent"],
@@ -143,7 +142,7 @@ async def message_status(request: Request):
         return {"status": "error"}
 
 """
-Debugging endpoints
+Debugging endpoints ToDo: secure these ones later
 """
 
 @app.post("/api/send")
@@ -155,7 +154,6 @@ async def send_message(message: WhatsAppOutgoingMessage):
 @app.get("/api/sessions")
 async def get_sessions():
     """API endpoint to get all active conversation sessions (for debugging/admin)."""
-    # In a production environment, you'd want to secure this endpoint
     return {
         phone: {
             "message_count": len(session["conversation_history"]),
