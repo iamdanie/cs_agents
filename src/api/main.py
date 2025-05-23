@@ -2,31 +2,23 @@
 WhatsApp API integration for the Kavak Bot.
 This module provides API endpoints to integrate the Kavak Bot with WhatsApp using Twilio's API.
 """
-
-from typing import Dict, Optional
+from typing import Dict
 from fastapi import FastAPI, Request, Response, Depends, HTTPException, BackgroundTasks
-from pydantic import BaseModel
-from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
 from twilio.rest import Client
 from twilio.request_validator import RequestValidator
-from src.agentic_approach.main import (
+from src.bot.main import (
     triage_agent,
     Runner,
 )
+from src.api.models import (
+    Settings,
+    Message,
+    WhatsAppOutgoingMessage,
+    WhatsAppIncomingMessage
+)
 
 load_dotenv()
-
-class Settings(BaseSettings):
-    openai_api_key: str
-    kb_url: str
-    twilio_account_sid: Optional[str] = None
-    twilio_auth_token: Optional[str] = None
-    twilio_phone_number: Optional[str] = None
-    webhook_url: Optional[str] = None
-    
-class Config:
-	env_file = ".env"
 
 settings = Settings()
 
@@ -37,32 +29,9 @@ if settings.twilio_account_sid and settings.twilio_auth_token:
 app = FastAPI(title="Kavak WhatsApp Bot API")
 
 conversation_sessions: Dict[str, Dict] = {}
-
-class Message(BaseModel):
-    content: str
-    role: str = "user"
-    
-class WhatsAppIncomingMessage(BaseModel):
-    From: str  # WhatsApp phone number of the sender
-    Body: str  # Message content
-    SmsMessageSid: str  # Unique message ID
-    
-class WhatsAppOutgoingMessage(BaseModel):
-    to: str
-    message: str
-    
-class WhatsappMessageStatusUpdate(BaseModel):
-    MessageSid: Optional[str] = None
-    MessageStatus: Optional[str] = None
-    SmsSid: Optional[str] = None
-    SmsStatus: Optional[str] = None
     
 def validate_twilio_request(request_data, signature, url):
-    """Validate that the request is coming from Twilio."""
-    if not settings.twilio_auth_token:
-        # This is only for dev
-        return True
-        
+    """Validate that the request is coming from Twilio."""        
     validator = RequestValidator(settings.twilio_auth_token)
     return validator.validate(url, request_data, signature)
 
@@ -91,7 +60,6 @@ async def process_message(phone_number: str, message_content: str):
             context=session["context"]
         )
         
-        # Check if agent needs triage
         if result.final_output.needsTriage:
             session["last_agent"] = triage_agent
             result = await Runner.run(
@@ -100,11 +68,9 @@ async def process_message(phone_number: str, message_content: str):
                 context=session["context"]
             )
         
-        # Update the session with the latest information
         session["conversation_history"] = result.to_input_list()
         session["last_agent"] = result.last_agent
         
-        # Extract the message to send back
         if hasattr(result.final_output, "message"):
             return result.final_output.message
         return "I'm processing your request but couldn't generate a response."
@@ -125,8 +91,18 @@ async def send_whatsapp_message(to: str, message_content: str):
         return {"status": "sent", "sid": message.sid}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+    
+async def handle_message(phone_number: str, message_content: str):
+    """Handle a message and send the response back via WhatsApp."""
+    
+    response_message = await process_message(phone_number, message_content)
+    
+    await send_whatsapp_message(phone_number, response_message)
 
-# API endpoints
+"""
+Webhook endpoints needed for Twilio integration
+"""
+
 @app.post("/webhook/incoming")
 async def incoming_message(
     request: Request,
@@ -154,13 +130,6 @@ async def incoming_message(
     
     return Response(status_code=200)
 
-async def handle_message(phone_number: str, message_content: str):
-    """Handle a message and send the response back via WhatsApp."""
-    
-    response_message = await process_message(phone_number, message_content)
-    
-    await send_whatsapp_message(phone_number, response_message)
-
 @app.post("/webhook/status")
 async def message_status(request: Request):
     """Webhook endpoint for message status updates from Twilio."""
@@ -172,6 +141,10 @@ async def message_status(request: Request):
     except Exception as e:
         print(f"Error in status webhook: {str(e)}")
         return {"status": "error"}
+
+"""
+Debugging endpoints
+"""
 
 @app.post("/api/send")
 async def send_message(message: WhatsAppOutgoingMessage):
@@ -193,22 +166,18 @@ async def get_sessions():
 
 @app.delete("/api/sessions/{phone_number}")
 async def delete_session(phone_number: str):
-    """API endpoint to delete a session (for debugging/admin)."""
+    """API endpoint to delete a session"""
     if phone_number in conversation_sessions:
         del conversation_sessions[phone_number]
         return {"status": "deleted"}
     raise HTTPException(status_code=404, detail="Session not found")
 
-
-
-# For testing purposes - direct API endpoints that don't require Twilio
 @app.post("/api/direct/message")
 async def direct_message(message: Message, phone_number: str):
     """API endpoint for direct messaging without going through Twilio (for testing)."""
     response_message = await process_message(phone_number, message.content)
     return {"response": response_message}
 
-# Run the app
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("src.agentic_approach.whatsapp_api:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("src.api:app", host="0.0.0.0", port=8000, reload=True)

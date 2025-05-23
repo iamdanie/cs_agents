@@ -56,14 +56,14 @@ TWILIO_PHONE_NUMBER=your_twilio_phone_number
 ### Running the CLI Version
 
 ```bash
-poetry run python src/agentic_approach/main.py
+poetry run python src/bot/main.py
 ```
 
 ### Running the WhatsApp API Version
 
 1. Start the API server:
 ```bash
-./start_whatsapp_api.sh
+./start_api.sh
 ```
 
 2. The server will start at http://localhost:8000
@@ -106,7 +106,7 @@ The WhatsApp API exposes the following endpoints:
 ### Project Structure
 
 - `src/agentic_approach/main.py`: Core bot implementation
-- `src/agentic_approach/whatsapp_api.py`: WhatsApp API integration
+- `src/agentic_approach/api.py`: WhatsApp API integration
 - `resources/`: Contains car inventory and knowledge base files
 
 ### Adding New Capabilities
