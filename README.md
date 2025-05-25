@@ -17,6 +17,11 @@ The bot is built using:
 
 ![Image](https://github.com/user-attachments/assets/758d3711-ac3a-4237-a908-db49d6d2baa1)
 
+
+## A closer look to the Bot and Agents architecture
+
+![Image](https://github.com/user-attachments/assets/21c57ea9-fce8-4840-a69b-a458d4d1b1a1)
+
 ## Features
 
 - Multi-agent architecture for specialized handling of different query types
