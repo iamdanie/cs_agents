@@ -13,6 +13,10 @@ The bot is built using:
 - Vector stores for efficient knowledge retrieval (knowledge base)
 - A triage system that routes queries to the appropriate agent
 
+## Architecture overview
+
+![Image](https://github.com/user-attachments/assets/758d3711-ac3a-4237-a908-db49d6d2baa1)
+
 ## Features
 
 - Multi-agent architecture for specialized handling of different query types
