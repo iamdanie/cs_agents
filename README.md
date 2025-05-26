@@ -2,6 +2,8 @@
 
 An intelligent chatbot for Kavak that helps users find cars and provides customer support information using AI agents.
 
+https://github.com/user-attachments/assets/da1b5de5-203c-4709-bb4b-755bde4a8a7d
+
 ## Overview
 
 This project implements a conversational bot for Kavak with two main agents:
