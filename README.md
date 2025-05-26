@@ -22,6 +22,11 @@ The bot is built using:
 
 ![Image](https://github.com/user-attachments/assets/21c57ea9-fce8-4840-a69b-a458d4d1b1a1)
 
+
+## Roadmap (Improvements in sight)
+
+[Link to roadmap](https://docs.google.com/document/d/1pN54yVtU7m08CmR3kkdTkSKnjk_L4-Jr9s6X7WnrXJ8/edit?tab=t.0)
+
 ## Features
 
 - Multi-agent architecture for specialized handling of different query types
