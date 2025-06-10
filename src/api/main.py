@@ -31,7 +31,7 @@ app = FastAPI(title="Kavak WhatsApp Bot API")
 conversation_sessions: Dict[str, Dict] = {}
     
 def validate_twilio_request(request_data, signature, url):
-    """Validate that the request is coming from Twilio."""        
+    """Validate that the request is coming from Twilio."""
     validator = RequestValidator(settings.twilio_auth_token)
     return validator.validate(url, request_data, signature)
 
@@ -114,7 +114,14 @@ async def incoming_message(
     form_dict = dict(form_data)
     
     twilio_signature = request.headers.get("X-Twilio-Signature", "")
-    if not validate_twilio_request(form_dict, twilio_signature, str(request.url)):
+    
+    scheme = request.headers.get('X-Forwarded-Proto', 'https')
+    host = request.headers.get('X-Forwarded-Host', request.url.hostname)
+    full_url = f"{scheme}://{host}{request.url.path}"
+    
+    print('URL', full_url)
+
+    if not validate_twilio_request(form_dict, twilio_signature, full_url):
         raise HTTPException(status_code=403, detail="Invalid Twilio signature")
     
     whatsapp_message = WhatsAppIncomingMessage(
@@ -146,6 +153,10 @@ async def message_status(request: Request):
 """
 Debugging endpoints ToDo: secure these ones later
 """
+
+@app.get("/api/health")
+async def health():
+    return {"status": "ok"}
 
 @app.post("/api/send")
 async def send_message(message: WhatsAppOutgoingMessage):
